@@ -64,3 +64,5 @@ __pycache__
 
 # Docker related files
 .Xauthority
+cmake-build-*
+.idea

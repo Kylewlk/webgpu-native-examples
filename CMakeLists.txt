@@ -2,46 +2,40 @@ cmake_minimum_required(VERSION 3.16)
 set(NAME webgpu-native-examples)
 project(${NAME} LANGUAGES C CXX)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_C_STANDARD 99)
+
 # Build type
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
-
-# Architecture string.
-set(ARCH "${CMAKE_SYSTEM_PROCESSOR}" CACHE STRING "Override CPU architecture")
-string(REGEX REPLACE "amd64" "x86_64" KERNEL_ARCH "${ARCH}")
-
-if("${KERNEL_ARCH}" STREQUAL "x86_64")
-  set(ARCH "x64")
-else()
-  message(FATAL_ERROR "Unsupported ARCH: ${KERNEL_ARCH}")
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
 # Set directory locations (allowing us to move directories easily)
-set(BUILD_DIR ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}${ARCH})
+set(BUILD_DIR ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE})
 
 # ==============================================================================
 # Dependencies
 # ==============================================================================
 
 # Google Dawn
-set(DAWN_ENABLE_PIC        ON CACHE BOOL "Position-Independent-Code")
-set(DAWN_ENABLE_DESKTOP_GL OFF CACHE BOOL "OpenGL backend")
-set(DAWN_ENABLE_OPENGLES   OFF CACHE BOOL "OpenGL ES backend")
-set(DAWN_BUILD_EXAMPLES    OFF CACHE BOOL "Dawn examples")
-set(TINT_BUILD_SAMPLES     OFF CACHE BOOL "Tint examples")
-set(TINT_BUILD_GLSL_WRITER OFF CACHE BOOL "OpenGL SL writer")
 
-if (WIN32)
-  set(TINT_BUILD_MSL_WRITER  OFF CACHE BOOL "Metal SL writer")
-  set(TINT_BUILD_SPV_WRITER  OFF CACHE BOOL "SPIR-V writer")
-elseif(UNIX)
-  set(TINT_BUILD_MSL_WRITER  OFF CACHE BOOL "Metal SL writer")
-  set(TINT_BUILD_HLSL_WRITER OFF CACHE BOOL "DirectX SL writer")
-endif()
+set(DAWN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/dawn)
+set(DAWN_INCLUDE_DIR ${DAWN_DIR}/include)
+set(DAWN_LIB_DIR ${DAWN_DIR})
+if (EXISTS ${DAWN_DIR}/Debug/webgpu_dawn.lib)
+    set(DAWN_LIB_DIR ${DAWN_DIR}/Debug)
+    message(STATUS "Use Debug dawn: ${DAWN_LIB_DIR}")
+endif ()
+file(GLOB DAWN_LIBS ${DAWN_LIB_DIR}/*.lib)
+#message(STATUS "DAWN_LIBS: ${DAWN_LIBS}")
 
-add_subdirectory(external/dawn/dawn dawn EXCLUDE_FROM_ALL)
-set(DAWN_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/dawn)
+#add_library(dawn STATIC IMPORTED)
+#set_target_properties(dawn PROPERTIES
+#        INTERFACE_INCLUDE_DIRECTORIES ${DAWN_INCLUDE_DIR}
+#        IMPORTED_LOCATION ${DAWN_LIBS}
+#)
+add_library(dawn INTERFACE)
+target_include_directories(dawn INTERFACE ${DAWN_INCLUDE_DIR})
 
 # WebGPU native
 set(WEBGPU_NATIVE_HEADERS
@@ -49,35 +43,12 @@ set(WEBGPU_NATIVE_HEADERS
 )
 
 set(WEBGPU_NATIVE_SOURCES
-  ${SOURCES}
   lib/wgpu_native/wgpu_native.cpp
 )
 
-set(TARGET wgpu_native)
-
-add_library(${TARGET} SHARED ${WEBGPU_NATIVE_HEADERS} ${WEBGPU_NATIVE_SOURCES})
-set_property(TARGET ${TARGET} PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_target_properties(${TARGET} PROPERTIES
-    PREFIX ""
-    LIBRARY_OUTPUT_DIRECTORY ${BUILD_DIR}
-    RUNTIME_OUTPUT_DIRECTORY ${BUILD_DIR}
-    SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX}
-)
-target_include_directories(${TARGET}
-  PRIVATE
-    ${DAWN_BINARY_DIR}/gen/src/include/dawn # <webgpu.h>
-)
-
-target_link_libraries(${TARGET}
-  PRIVATE
-    dawncpp
-    dawn_proc
-    dawn_common
-    dawn_platform
-    dawn_native
-    dawn_utils
-    dawn_internal_config  # for definitions DAWN_ENABLE_BACKEND_*
-)
+add_library(wgpu_native ${WEBGPU_NATIVE_HEADERS} ${WEBGPU_NATIVE_SOURCES})
+target_link_libraries(wgpu_native PUBLIC dawn)
+target_compile_options(wgpu_native PUBLIC "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
 # pthread
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -121,16 +92,16 @@ set(RPLY_SOURCES
 
 # ffmpeg
 # dnf -y install ffmpeg-devel
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
-    libavdevice
-    libavfilter
-    libavformat
-    libavcodec
-    libswresample
-    libswscale
-    libavutil
-)
+#find_package(PkgConfig REQUIRED)
+#pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
+#    libavdevice
+#    libavfilter
+#    libavformat
+#    libavcodec
+#    libswresample
+#    libswscale
+#    libavutil
+#)
 
 # ==============================================================================
 # Headers and sources
@@ -298,6 +269,7 @@ add_executable(${TARGET}
     ${KTX_SOURCES}
     ${RPLY_SOURCES}
 )
+
 set_target_properties(${TARGET} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${BUILD_DIR}
 )
@@ -325,7 +297,7 @@ set_target_properties(${TARGET} PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
 
 if(MSVC)
     target_compile_options(${TARGET} PRIVATE /W4 /D_CRT_SECURE_NO_WARNINGS)
-    target_compile_options(${TARGET} PRIVATE /fp:fast)
+    target_compile_options(${TARGET} PRIVATE /fp:fast /utf-8)
 else()
     target_compile_options(${TARGET} PRIVATE -Wall -Wextra -pedantic)
     target_compile_options(${TARGET} PRIVATE -ffast-math)
@@ -339,13 +311,7 @@ endif()
 # Include directories
 # ==============================================================================
 
-if(WIN32)
-    # nothing to do for now
-elseif(APPLE)
-    # nothing to do for now
-else()
-    target_include_directories(${TARGET}
-        PRIVATE ${DAWN_BINARY_DIR}/gen/src/include
+target_include_directories(${TARGET}
         PRIVATE external/basisu
         PRIVATE external/cglm/include
         PRIVATE external/cgltf
@@ -357,32 +323,15 @@ else()
         PRIVATE external/rply
         PRIVATE external/sc
         PRIVATE external/stb
-    )
-endif()
+)
 
 # ==============================================================================
 # Link libraries
 # ==============================================================================
-
-if(WIN32)
-    # nothing to do for now
-else()
-    set_target_properties(${TARGET} PROPERTIES LINK_FLAGS "-Wl,-rpath,./")
-    target_link_libraries(${TARGET} PRIVATE
-      m
-      ${Vulkan_LIBRARIES}
-      Threads::Threads
-      PkgConfig::LIBAV
-      dawncpp
-      dawn_proc
-      dawn_common
-      dawn_platform
-      dawn_native
-      wgpu_native
-      glfw
-    )
-endif()
-
+target_link_libraries(${TARGET} PRIVATE
+        Threads::Threads
+        wgpu_native
+)
 # ==============================================================================
 # IDE support
 # ==============================================================================

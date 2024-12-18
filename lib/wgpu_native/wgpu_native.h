@@ -3,6 +3,8 @@
 
 #include <dawn/webgpu.h>
 
+#define DAWN_ENABLE_BACKEND_VULKAN 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif

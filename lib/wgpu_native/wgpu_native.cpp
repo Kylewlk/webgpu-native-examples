@@ -1,5 +1,6 @@
 #include "wgpu_native.h"
 
+#include <Windows.h>
 #include <dawn/dawn_proc.h>
 #include <dawn/native/DawnNative.h>
 #include <dawn/webgpu_cpp.h>
@@ -174,7 +175,7 @@ static std::unique_ptr<wgpu::ChainedStruct> SurfaceDescriptor(void* display,
   std::unique_ptr<wgpu::SurfaceDescriptorFromWindowsHWND> desc
     = std::make_unique<wgpu::SurfaceDescriptorFromWindowsHWND>();
   desc->hwnd      = window;
-  desc->hinstance = GetModuleHandle(nullptr);
+  desc->hinstance = GetModuleHandleW(nullptr);
   return std::move(desc);
 #elif defined(__linux__) // X11
   std::unique_ptr<wgpu::SurfaceDescriptorFromXlibWindow> desc
