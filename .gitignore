@@ -42,7 +42,7 @@ release_build
 /install
 /external/dawn/dawn
 /external/dawn/depot_tools
-/external/dawn/include
+#/external/dawn/include
 /external/dawn/lib
 
 # Executables
